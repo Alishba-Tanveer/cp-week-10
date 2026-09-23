@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - Assign2
       - Assign3
   pull_request:
     branches:
@@ -26,6 +27,17 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --runInBand --coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: error
 
       - name: Audit dependencies
         run: npm audit --audit-level=high

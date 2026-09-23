@@ -24,10 +24,16 @@ const config: Config = {
     ],
   },
   collectCoverageFrom: [
-    'src/**/*.(t|j)s',
-    'libs/**/*.(t|j)s',
-    'apps/**/*.(t|j)s',
+    'src/auth/auth.service.ts',
+    'src/comments/comments.service.ts',
+    'src/projects/projects.service.ts',
+    'src/tasks/tasks.service.ts',
   ],
+  coverageThreshold: {
+    global: {
+      statements: 70,
+    },
+  },
   coverageDirectory: './coverage',
   testEnvironment: 'node',
 };
