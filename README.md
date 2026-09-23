@@ -1,107 +1,122 @@
-# Coding Pixel Internship — Week 10
+## Assignment 1 — Integration Testing & Test Database
 
-## Testing & Production Hardening
+This assignment focuses on testing the NestJS API through its HTTP layer using Supertest and a dedicated PostgreSQL test database.
 
-Week 10 is the final week of the backend phase of the CMIT Full-Stack Internship Program delivered by Coding Pixel.
+The goal is to verify API behavior, validation, authentication, error handling, test isolation, and safe test database usage without affecting the development database.
 
-The focus of this week is to prove that the NestJS API works correctly through its HTTP surface, verify complete user journeys, enforce meaningful test coverage, and prepare the service for production operation.
+---
 
-## Week 10 Objectives
+## Assignment Requirements
 
-* Integration testing with Supertest
-* Separate test database configuration
-* Database migrations for testing
-* Test isolation and data reset between tests
-* HTTP-level testing of protected API routes
-* Testing `400`, `401`, and `404` error paths
-* End-to-end testing of a complete application journey
-* Refresh-token flow testing
-* Role-based authorization testing
-* Logout and token invalidation testing
-* Jest coverage threshold enforcement
-* Production configuration validation
-* Request logging
-* Database-aware `/health` endpoint
-* Graceful application shutdown
+### W1 — Separate Test Database
 
-## Assignments
+- Uses a dedicated PostgreSQL database named `week10_test`.
+- Test configuration is stored in `.env.test`.
+- The development database is not used by the E2E test suite.
+- Database migrations are executed automatically before the E2E suite.
+- A safety guard prevents tests from running against a non-test database.
 
-### Assignment 1 — Integration Tests with Supertest
+### W2 — Test Isolation
 
-Build integration tests against the HTTP surface of the NestJS API using a separate test database.
+- Database data is reset after every integration test.
+- Tables are truncated with `RESTART IDENTITY CASCADE`.
+- Tests can run independently without depending on data created by previous tests.
+- Repeated test runs produce consistent results.
 
-Key requirements:
+### C1 — HTTP Create → Read
 
-* Separate test database
-* Run migrations before the test suite
-* Reset test data between tests
-* Test the API through HTTP requests
-* Test successful resource creation and retrieval
-* Test `400` validation errors
-* Test `401` unauthorized requests
-* Test `404` not-found responses
-* Keep tests independent
-* Share setup through reusable helpers or factories
+Tests the complete HTTP flow for creating and reading a project:
 
-### Assignment 2 — End-to-End Flow & Coverage
+1. Authenticate a test user.
+2. Create a project through the API.
+3. Verify HTTP `201 Created`.
+4. Verify the response body.
+5. Read the created project through the API.
+6. Verify the returned project data.
 
-Implement a complete end-to-end application journey.
+The test application is bootstrapped once using Nest's `Test.createTestingModule`.
 
-The main flow covers:
+The E2E application also uses the same global validation configuration as the main application:
 
-1. Register
-2. Login
-3. Create a project
-4. Create a task inside the project
-5. Add a comment to the task
-6. Refresh the access token
-7. Continue using the protected API with the new token
+- `ValidationPipe`
+- `whitelist: true`
+- `forbidNonWhitelisted: true`
+- `transform: true`
 
-The flow also verifies:
+### C2 — Validation & Authentication Errors
 
-* Intermediate application state
-* `403` authorization behavior for a viewer attempting a write
-* `401` behavior after logout
-* Refresh-token functionality
-* A minimum **70% statement coverage threshold on services**
-* Tests that meaningfully fail when their expected behavior is broken
+Tests that:
 
-### Assignment 3 — Production Hardening
+- Invalid request bodies return `400 Bad Request`.
+- Protected project write operations without authentication return `401 Unauthorized`.
+- Error responses follow the application's standard error structure.
 
-Prepare the backend for production operation.
+### C3 — Not Found Handling
 
-Key requirements:
+Tests that valid-format but nonexistent project IDs return `404 Not Found` for:
 
-* Environment variable schema validation
-* Typed configuration access
-* Request logging interceptor
-* Method, path, status, and duration logging
-* Database-aware `GET /health`
-* Graceful shutdown with `enableShutdownHooks`
-* Automated test for a production-hardening behavior
+- `GET`
+- `PATCH`
+- `DELETE`
 
-## Technology Stack
+The tests also verify the standard error response structure.
 
-* NestJS
-* TypeScript
-* PostgreSQL
-* TypeORM
-* Jest
-* Supertest
-* JWT Authentication
-* `@nestjs/config`
+### C4 — Test Independence
 
-## Week 10 Deliverables
+Tests are designed so that one test does not depend on data created by another test.
 
-By the end of Week 10, the backend should have:
+Reusable integration helpers are provided for:
 
-* A dedicated test database
-* Reliable HTTP integration tests
-* A complete end-to-end test flow
-* Coverage enforcement
-* Authentication and authorization test coverage
-* Validated application configuration
-* Request logging
-* A database-aware health endpoint
-* Graceful shutdown handling
-* Passing automated tests
+- User registration
+- User login
+- Registering and logging in
+- Standard error-shape assertions
+
+The database is reset after each test.
+
+The suite was also executed with randomized Jest ordering to verify test independence.
+
+---
+
+## Optional Requirements
+
+### X1 — Combined Filters
+
+Tests that multiple filters are combined using **AND semantics**.
+
+The test verifies filtering by:
+
+- Project ID
+- Task status
+
+Only records satisfying both conditions are returned.
+
+### X2 — Unknown DTO Fields
+
+Tests that an unknown request property is rejected because the API uses:
+
+```text
+whitelist: true
+forbidNonWhitelisted: true
+```
+
+The test also verifies that the rejected request does not create a database record.
+
+### X3 — Test Database Safety Guard
+
+The E2E setup explicitly checks that the database is:
+
+```text
+week10_test
+```
+
+If another database is configured, the test suite refuses to start.
+
+Example verified behavior:
+
+```text
+Refusing to run E2E tests against database "week6_assign1".
+Expected "week10_test".
+```
+
+This protects the development database from accidental test execution.
