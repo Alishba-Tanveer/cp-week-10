@@ -5,6 +5,8 @@ export const envValidationSchema = Joi.object({
     .valid('development', 'test', 'production')
     .default('development'),
 
+  PORT: Joi.number().port().required(),
+
   DB_HOST: Joi.string().required(),
   DB_PORT: Joi.number().port().default(5432),
   DB_USER: Joi.string().required(),

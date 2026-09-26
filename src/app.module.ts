@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { CommentsModule } from './comments/comments.module';
+import configuration, { type AppConfig } from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { throttlerConfig } from './config/throttler.config';
 import { ProjectMemberSubscriber } from './database/subscribers/project-member.subscriber';
@@ -26,6 +27,8 @@ import { UsersModule } from './users/users.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      cache: true,
+      load: [configuration],
       validationSchema: envValidationSchema,
     }),
 
@@ -34,25 +37,29 @@ import { UsersModule } from './users/users.module';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get<string>('DB_USER'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_NAME'),
-        entities: [
-          User,
-          RefreshToken,
-          Project,
-          ProjectMember,
-          Task,
-          Tag,
-          Comment,
-        ],
-        subscribers: [ProjectMemberSubscriber],
-        synchronize: false,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const config = configService.getOrThrow<AppConfig>('app');
+
+        return {
+          type: 'postgres',
+          host: config.database.host,
+          port: config.database.port,
+          username: config.database.user,
+          password: config.database.password,
+          database: config.database.name,
+          entities: [
+            User,
+            RefreshToken,
+            Project,
+            ProjectMember,
+            Task,
+            Tag,
+            Comment,
+          ],
+          subscribers: [ProjectMemberSubscriber],
+          synchronize: false,
+        };
+      },
     }),
 
     AuthModule,
