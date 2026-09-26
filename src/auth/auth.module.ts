@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import type { AppConfig } from '../config/configuration';
 import { Comment } from '../entities/Comment';
 import { ProjectMember } from '../entities/ProjectMember';
 import { RefreshToken } from '../entities/RefreshToken';
@@ -21,7 +22,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: configService.getOrThrow<AppConfig>('app').jwt.secret,
       }),
     }),
 

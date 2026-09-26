@@ -1,11 +1,15 @@
-import { ConfigService } from '@nestjs/config';
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
+
+import type { AppConfig } from './configuration';
 
 export function configureSecurity(
   app: INestApplication,
   configService: ConfigService,
 ): void {
+  const config = configService.getOrThrow<AppConfig>('app');
+
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -26,7 +30,7 @@ export function configureSecurity(
   );
 
   app.enableCors({
-    origin: configService.getOrThrow<string>('CORS_ORIGIN'),
+    origin: config.corsOrigin,
     credentials: true,
   });
 }

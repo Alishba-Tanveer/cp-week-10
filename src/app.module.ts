@@ -19,6 +19,7 @@ import { Tag } from './entities/Tag';
 import { Task } from './entities/Task';
 import { User } from './entities/User';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { HealthModule } from './health/health.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
@@ -67,6 +68,7 @@ import { UsersModule } from './users/users.module';
     ProjectsModule,
     TasksModule,
     CommentsModule,
+    HealthModule,
   ],
 
   providers: [

@@ -2,6 +2,7 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -19,6 +20,7 @@ describe('HttpExceptionFilter', () => {
     const request = {
       method: 'GET',
       url: '/test/error',
+      requestId: 'filter-request-123',
     };
 
     const host = {
@@ -35,9 +37,48 @@ describe('HttpExceptionFilter', () => {
     };
   }
 
+  it('includes requestId in structured unexpected-error logs', () => {
+    const configService = {
+      getOrThrow: jest.fn().mockReturnValue({
+        nodeEnv: 'production',
+      }),
+    } as unknown as ConfigService;
+
+    const loggerSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    const filter = new HttpExceptionFilter(configService);
+    const { host } = createHost();
+
+    filter.catch(new Error('unexpected failure'), host);
+
+    expect(loggerSpy).toHaveBeenCalled();
+
+    const loggedMessage = loggerSpy.mock.calls[0][0];
+
+    expect(typeof loggedMessage).toBe('string');
+
+    expect(JSON.parse(loggedMessage as string)).toEqual(
+      expect.objectContaining({
+        event: 'http.unhandled_exception',
+        requestId: 'filter-request-123',
+        method: 'GET',
+        path: '/test/error',
+        status: 500,
+        message: 'unexpected failure',
+        stack: expect.any(String),
+      }),
+    );
+
+    loggerSpy.mockRestore();
+  });
+
   it('returns detailed unexpected errors in development', () => {
     const configService = {
-      get: jest.fn().mockReturnValue('development'),
+      getOrThrow: jest.fn().mockReturnValue({
+        nodeEnv: 'development',
+      }),
     } as unknown as ConfigService;
 
     const filter = new HttpExceptionFilter(configService);
@@ -62,7 +103,9 @@ describe('HttpExceptionFilter', () => {
 
   it('returns generic unexpected errors in production', () => {
     const configService = {
-      get: jest.fn().mockReturnValue('production'),
+      getOrThrow: jest.fn().mockReturnValue({
+        nodeEnv: 'production',
+      }),
     } as unknown as ConfigService;
 
     const filter = new HttpExceptionFilter(configService);
@@ -91,7 +134,9 @@ describe('HttpExceptionFilter', () => {
 
   it('preserves HttpException messages in production', () => {
     const configService = {
-      get: jest.fn().mockReturnValue('production'),
+      getOrThrow: jest.fn().mockReturnValue({
+        nodeEnv: 'production',
+      }),
     } as unknown as ConfigService;
 
     const filter = new HttpExceptionFilter(configService);

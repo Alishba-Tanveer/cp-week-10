@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 
 import { RedactingLogger } from '../logging/redacting-logger';
+import type { AppConfig } from '../../config/configuration';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -20,7 +21,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
-    const request = http.getRequest<Request>();
+    const request = http.getRequest<Request & { requestId?: string }>();
     const response = http.getResponse<Response>();
 
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
@@ -62,12 +63,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
         exception instanceof Error ? exception.stack : undefined;
 
       this.logger.error(
-        `Unhandled exception on ${request.method} ${request.url}: ${originalMessage}`,
-        stack,
+        JSON.stringify({
+          event: 'http.unhandled_exception',
+          requestId: request.requestId ?? 'unknown',
+          method: request.method,
+          path: request.url,
+          status: statusCode,
+          message: originalMessage,
+          ...(stack ? { stack } : {}),
+        }),
       );
 
       const nodeEnv =
-        this.configService.get<string>('NODE_ENV') ?? 'development';
+        this.configService.getOrThrow<AppConfig>('app').nodeEnv;
 
       if (nodeEnv === 'development') {
         message = originalMessage;

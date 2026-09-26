@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
 import { RedactingLogger } from '../common/logging/redacting-logger';
+import type { AppConfig } from '../config/configuration';
 import { RefreshToken } from '../entities/RefreshToken';
 import { User } from '../entities/User';
 import { LogoutDto } from './dto/logout.dto';
@@ -45,17 +46,13 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    const config = this.configService.getOrThrow<AppConfig>('app');
+
     const passwordHash = await argon2.hash(registerDto.password, {
       type: argon2.argon2id,
-      memoryCost: this.configService.getOrThrow<number>(
-        'ARGON2_MEMORY_COST',
-      ),
-      timeCost: this.configService.getOrThrow<number>(
-        'ARGON2_TIME_COST',
-      ),
-      parallelism: this.configService.getOrThrow<number>(
-        'ARGON2_PARALLELISM',
-      ),
+      memoryCost: config.argon2.memoryCost,
+      timeCost: config.argon2.timeCost,
+      parallelism: config.argon2.parallelism,
     });
 
     const user = this.userRepository.create({
@@ -77,7 +74,6 @@ export class AuthService {
     this.logger.debug({
       event: 'auth.login.attempt',
       email: loginDto.email,
-      password: loginDto.password,
     });
     const email = loginDto.email.trim().toLowerCase();
 
@@ -193,13 +189,11 @@ export class AuthService {
       email: user.email,
     };
 
-    const jwtSecret = this.configService.getOrThrow<string>('JWT_SECRET');
+    const config = this.configService.getOrThrow<AppConfig>('app');
 
-    const accessExpiresIn =
-      this.configService.getOrThrow<string>('JWT_ACCESS_EXPIRES_IN');
-
-    const refreshExpiresIn =
-      this.configService.getOrThrow<string>('JWT_REFRESH_EXPIRES_IN');
+    const jwtSecret = config.jwt.secret;
+    const accessExpiresIn = config.jwt.accessExpiresIn;
+    const refreshExpiresIn = config.jwt.refreshExpiresIn;
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: jwtSecret,

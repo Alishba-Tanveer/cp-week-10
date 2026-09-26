@@ -23,18 +23,28 @@ describe('AuthService', () => {
   };
 
   const configService = {
-    getOrThrow: jest.fn((key: string): string => {
-      const values: Record<string, string> = {
-        JWT_SECRET: 'test-secret-that-is-at-least-32-characters-long',
-        JWT_ACCESS_EXPIRES_IN: '15m',
-        JWT_REFRESH_EXPIRES_IN: '7d',
-        ARGON2_MEMORY_COST: '16384',
-        ARGON2_TIME_COST: '1',
-        ARGON2_PARALLELISM: '1',
-      };
-
-      return values[key];
-    }),
+    getOrThrow: jest.fn(() => ({
+      nodeEnv: 'test',
+      port: 3000,
+      database: {
+        host: 'localhost',
+        port: 5432,
+        user: 'test_user',
+        password: 'test_password',
+        name: 'test_database',
+      },
+      jwt: {
+        secret: 'test-secret-that-is-at-least-32-characters-long',
+        accessExpiresIn: '15m',
+        refreshExpiresIn: '7d',
+      },
+      argon2: {
+        memoryCost: 16384,
+        timeCost: 1,
+        parallelism: 1,
+      },
+      corsOrigin: 'http://localhost:3000',
+    })),
   };
 
   type TransactionUserRepository = {
