@@ -12,6 +12,7 @@ import { RedactingLogger } from '../logging/redacting-logger';
 
 interface RequestWithId extends Request {
   requestId?: string;
+  requestStartedAt?: bigint;
 }
 
 @Injectable()
@@ -32,6 +33,7 @@ export class LoggingInterceptor implements NestInterceptor {
       request.headers['x-request-id']?.toString() ?? randomUUID();
 
     request.requestId = requestId;
+    request.requestStartedAt = process.hrtime.bigint();
     response.setHeader('X-Request-ID', requestId);
 
     const method = request.method;

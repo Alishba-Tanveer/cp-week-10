@@ -71,10 +71,6 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    this.logger.debug({
-      event: 'auth.login.attempt',
-      email: loginDto.email,
-    });
     const email = loginDto.email.trim().toLowerCase();
 
     const user = await this.userRepository.findOne({

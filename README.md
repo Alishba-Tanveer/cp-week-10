@@ -1,334 +1,418 @@
-# Week 10 — Assignment 2
-## End-to-End Flow and Coverage Threshold
+# Week 10 — Assignment 3: Production Hardening
 
-This assignment implements and verifies a complete end-to-end product journey and adds a service-level test coverage quality gate.
+## Overview
 
-The flow is tested from a clean database and covers authentication, project creation, task creation, comments, token refresh, authorization, and logout behavior.
+This assignment focuses on preparing the Week 10 NestJS application for production by improving configuration management, request logging, health monitoring, graceful shutdown, and security-related logging.
 
----
+The implementation covers:
 
-## Assignment Objectives
-
-- Build a realistic end-to-end user journey.
-- Verify intermediate data at every important step.
-- Continue the journey after refreshing the access token.
-- Verify denied authorization and authentication branches.
-- Enforce a minimum service statement coverage threshold.
-- Prove that tests fail when protected behavior is broken.
-- Publish coverage reports through CI.
-- Improve coverage by testing a real previously uncovered branch.
-- Verify that the E2E flow is repeatable and does not depend on test order.
+* **W1:** Validated configuration
+* **W2:** Request logging interceptor
+* **C1:** Application and database health checks
+* **C2:** Typed configuration and centralized environment access
+* **C3:** Graceful shutdown
+* **C4:** Automated hardening tests
+* **X1:** Detailed health status with database timeout handling
+* **X2:** Secret and credential redaction
+* **X3:** Structured JSON logging with request IDs
 
 ---
 
-# Warm-Up
+# Assignment Requirements
 
-## W1 — Complete Product Journey
+## W1 — Validated Configuration
 
-The E2E flow in:
+The application uses `@nestjs/config` with Joi validation.
 
-`test/assignment2.e2e-spec.ts`
+Configuration is loaded centrally through the configuration module and validated when the application starts.
 
-covers the following journey:
+Required environment variables include:
 
-1. Register a new owner.
-2. Log in as the owner.
-3. Create a project.
-4. Create a task inside the created project.
-5. Read the task back.
-6. Add a comment to the task.
-7. Read the comments back.
-8. Refresh the authentication tokens.
-9. Continue using the new access token.
-10. Register and log in a second user.
-11. Add the second user as a project viewer.
-12. Verify that the viewer cannot create a task.
-13. Log out the owner.
-14. Attempt to reuse the rotated refresh token.
-15. Verify that the request is rejected.
+* `PORT`
+* `DB_HOST`
+* `DB_USER`
+* `DB_PASSWORD`
+* `DB_NAME`
+* `JWT_SECRET`
+* `JWT_ACCESS_EXPIRES_IN`
+* `JWT_REFRESH_EXPIRES_IN`
+* `CORS_ORIGIN`
 
-The access token is stored and reused throughout the protected part of the journey. The flow does not perform a new login before each protected request.
+Typed numeric configuration is also validated for:
 
-The test passes from a clean database.
+* Database port
+* Application port
+* Argon2 memory cost
+* Argon2 time cost
+* Argon2 parallelism
 
-## W2 — Intermediate State Assertions
+Invalid configuration causes the application to reject startup.
 
-The E2E test verifies the data produced at each important stage rather than checking only HTTP status codes.
+For example:
 
-Examples:
-
-- Registration verifies the returned user identity.
-- Login verifies the access and refresh tokens.
-- Project creation verifies the project ID, name, and owner.
-- Task creation verifies the task ID, title, and `projectId`.
-- The created task is read back and verified against the project.
-- Comment creation verifies the comment ID, `taskId`, and `authorId`.
-- Comments are read back and verified against the created task.
-- The refresh operation verifies that new tokens are returned.
-- The protected request after refresh verifies that the new access token works.
-- Viewer task creation verifies the `403 Forbidden` response.
-- Refresh-token reuse after logout verifies the `401 Unauthorized` response.
-
----
-
-# Core Requirements
-
-## C1 — Token Refresh During the Flow
-
-The E2E journey performs a token refresh after the comment step.
-
-The returned access token replaces the previous access token, and the following protected request uses the refreshed token.
-
-The test also verifies refresh-token rotation by checking that a new refresh token is returned.
-
-The protected request after the refresh succeeds, proving that the refreshed access token can continue the user's journey.
-
----
-
-## C2 — Denied Authorization and Authentication Branches
-
-The same E2E flow tests both denied branches.
-
-### Viewer Authorization
-
-A second user is registered and added to the project with:
-
-`ProjectMemberRole.VIEWER`
-
-The viewer then attempts to create a task.
-
-Expected result:
-
-`403 Forbidden`
-
-This verifies that project-level viewer permissions prevent write operations.
-
-### Logout / Refresh Token Reuse
-
-After completing the normal journey, the owner logs out using the current access token and rotated refresh token.
-
-The test then attempts to reuse the refresh token.
-
-Expected result:
-
-`401 Unauthorized`
-
-This verifies that the refresh token is invalidated after logout.
-
-Both denied branches are asserted inside the same Assignment 2 E2E flow.
-
----
-
-# C3 — Coverage Threshold
-
-Jest coverage is configured in:
-
-`jest.config.ts`
-
-Coverage collection is scoped to the service files:
-
-- `src/auth/auth.service.ts`
-- `src/comments/comments.service.ts`
-- `src/projects/projects.service.ts`
-- `src/tasks/tasks.service.ts`
-
-The configuration enforces a minimum global statement coverage of:
-
-`70%`
-
-Example configuration:
-
-```ts
-collectCoverageFrom: [
-  'src/auth/auth.service.ts',
-  'src/comments/comments.service.ts',
-  'src/projects/projects.service.ts',
-  'src/tasks/tasks.service.ts',
-],
-
-coverageThreshold: {
-  global: {
-    statements: 70,
-  },
-},
+```text
+PORT=abc
 ```
 
-This makes coverage a test quality gate. If the configured threshold is not satisfied, the Jest command fails.
-
-### Coverage Verification
-
-Final coverage results:
-
-| Metric | Result |
-|---|---:|
-| Statements | **91.34%** |
-| Branches | **79.05%** |
-| Functions | **93.10%** |
-| Lines | **90.95%** |
-
-Required service statement coverage:
-
-**70%**
-
-Current service statement coverage:
-
-**91.34%**
-
-The project is therefore above the required coverage threshold.
-
-Coverage command:
-
-```bash
-npm test -- --runInBand --coverage
-```
+is rejected because `PORT` must be a valid numeric port.
 
 ---
 
-# C4 — Tests Proven to Fail
+# W2 — Request Logging
 
-Three meaningful tests were manually verified by breaking the production behavior they protect.
+A global `LoggingInterceptor` was implemented.
 
-The behavior was temporarily broken, the corresponding test was run and failed, and the production code was then restored.
+For every HTTP request, the interceptor records:
 
-The demonstrated behaviors were:
+* HTTP method
+* Request path
+* HTTP status
+* Request duration
+* Request ID
 
-1. Task creation correctly rejects a nonexistent project.
-2. A viewer cannot perform a protected write operation.
-3. A logged-out/revoked refresh token cannot be reused.
+Example:
 
-This confirms that the tests are protecting actual application behavior rather than merely increasing the coverage percentage.
-
-All production changes used for the failure demonstrations were restored before the final verification.
-
----
-
-# Challenge
-
-## X1 — Publish Coverage From CI
-
-GitHub Actions was extended to run the test suite with coverage and upload the generated coverage directory as a CI artifact.
-
-Workflow:
-
-`.github/workflows/security.yml`
-
-The workflow includes:
-
-```yaml
-- name: Run tests with coverage
-  run: npm test -- --runInBand --coverage
-
-- name: Upload coverage report
-  if: always()
-  uses: actions/upload-artifact@v4
-  with:
-    name: coverage-report
-    path: coverage/
-    if-no-files-found: error
-```
-
-The `coverage-report` artifact can be accessed from the GitHub Actions workflow run.
-
-The workflow also continues to run the dependency audit:
-
-```bash
-npm audit --audit-level=high
-```
-
----
-
-# X2 — Honest Coverage Improvement
-
-The HTML coverage report identified an uncovered branch in:
-
-`src/tasks/tasks.service.ts`
-
-The uncovered behavior was the partial-update branch where `title` is omitted:
-
-```ts
-if (updateTaskDto.title !== undefined) {
-  task.title = updateTaskDto.title;
+```json
+{
+  "requestId": "test-request-123",
+  "method": "GET",
+  "path": "/health",
+  "status": 200,
+  "duration": 0.59
 }
 ```
 
-A real regression test was added:
+The interceptor also handles failed requests and records their HTTP status.
 
-`preserves the existing title when title is omitted`
+Example:
 
-The test performs a partial task update without providing a title and verifies that:
-
-- the existing title is preserved,
-- the supplied description is updated,
-- existing status remains unchanged,
-- existing priority remains unchanged,
-- the task is saved correctly.
-
-This exercises the previously uncovered branch.
-
-TasksService branch coverage increased from:
-
-`91.93% → 93.54%`
-
-This was an actual branch-coverage improvement rather than additional assertions on an already-covered path.
-
----
-
-# X3 — Repeatability and Flakiness
-
-The complete E2E test suite was executed three consecutive times.
-
-### Run 1
-
-```text
-Test Suites: 4 passed, 4 total
-Tests:       54 passed, 54 total
-```
-
-### Run 2
-
-```text
-Test Suites: 4 passed, 4 total
-Tests:       54 passed, 54 total
-```
-
-### Run 3
-
-```text
-Test Suites: 4 passed, 4 total
-Tests:       54 passed, 54 total
-```
-
-The suite also executed with different test-suite ordering between runs.
-
-The E2E tests reset the database after each test using the test database reset helper. This prevents shared database state from one test from affecting another.
-
-The tests use the in-process Nest application with Supertest rather than depending on a fixed application port, avoiding fixed-port conflicts.
-
-Command used:
-
-```bash
-npm run test:e2e -- --runInBand
+```json
+{
+  "requestId": "error-request-123",
+  "method": "GET",
+  "path": "/health",
+  "status": 401,
+  "duration": 0.77
+}
 ```
 
 ---
 
-# Final Verification
+# C1 — Application and Database Health Check
 
-The following commands were run successfully before submission:
+A dedicated `/health` endpoint was added.
 
-## Unit Tests + Coverage
-
-```bash
-npm test -- --runInBand --coverage
+```http
+GET /health
 ```
 
-Result:
+The health endpoint checks:
+
+1. Application availability
+2. Database availability
+
+The database check executes a real PostgreSQL query:
+
+```sql
+SELECT 1
+```
+
+A healthy response contains:
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "application": {
+      "status": "up"
+    },
+    "database": {
+      "status": "up"
+    }
+  }
+}
+```
+
+If the database check fails, the application reports an unhealthy state and returns HTTP `503 Service Unavailable`.
+
+---
+
+# C2 — Typed and Centralized Configuration
+
+Application configuration is represented by the `AppConfig` TypeScript interface.
+
+Configuration is accessed through NestJS `ConfigService` instead of scattering environment-variable access throughout the application.
+
+The main application configuration contains:
 
 ```text
-Test Suites: 6 passed, 6 total
-Tests:       42 passed, 42 total
-Statements:  91.34%
-Branches:    79.05%
-Functions:   93.10%
-Lines:       90.95%
+nodeEnv
+port
+database
+jwt
+argon2
+corsOrigin
 ```
+
+The database configuration contains:
+
+```text
+host
+port
+user
+password
+name
+```
+
+JWT configuration contains:
+
+```text
+secret
+accessExpiresIn
+refreshExpiresIn
+```
+
+Argon2 configuration contains:
+
+```text
+memoryCost
+timeCost
+parallelism
+```
+
+Environment variables are centralized in:
+
+```text
+src/config/configuration.ts
+```
+
+The only direct `process.env` references are inside the centralized configuration mapping.
+
+---
+
+# C3 — Graceful Shutdown
+
+Graceful shutdown support was enabled in `main.ts`.
+
+```ts
+app.enableShutdownHooks();
+```
+
+This allows NestJS to respond to operating-system shutdown signals such as `SIGTERM`.
+
+The application is configured so that NestJS lifecycle shutdown handling can complete before the process exits, allowing registered resources such as the TypeORM database connection to close cleanly.
+
+TypeORM is configured with:
+
+```ts
+synchronize: false
+```
+
+so production database structure is not automatically modified during application startup.
+
+The same setting is also applied to the standalone TypeORM data source.
+
+---
+
+# C4 — Hardening Tests
+
+Automated tests were added for the production-hardening behavior.
+
+Configuration validation tests verify:
+
+* Valid configuration is accepted.
+* Missing required configuration is rejected.
+* Invalid `PORT` values are rejected.
+
+Health tests verify:
+
+* Successful database `SELECT 1` checks.
+* Database query failures.
+* Database timeout handling.
+* Unhealthy health responses.
+* HTTP `503` status when the database is unavailable.
+
+Logging tests verify:
+
+* Request method.
+* Request path.
+* Response status.
+* Request duration.
+* Generated request IDs.
+* Supplied `X-Request-ID` handling.
+* Request ID response headers.
+* Error request logging.
+
+---
+
+# X1 — Detailed Health Status
+
+The health endpoint provides a per-component status breakdown.
+
+The application check reports:
+
+```text
+up
+```
+
+The database check reports either:
+
+```text
+up
+```
+
+or:
+
+```text
+down
+```
+
+A database timeout is also handled.
+
+The database health check uses a two-second timeout:
+
+```text
+2000 ms
+```
+
+If the database does not respond within the timeout, the database is considered unhealthy.
+
+An unhealthy health result uses:
+
+```text
+HTTP 503 Service Unavailable
+```
+
+This allows monitoring systems to distinguish between an application that is running normally and an application whose database dependency is unavailable.
+
+---
+
+# X2 — Secret Redaction
+
+A dedicated `RedactingLogger` was implemented to prevent sensitive values from appearing in logs.
+
+Sensitive keys include:
+
+* `password`
+* `token`
+* `accessToken`
+* `access_token`
+* `refreshToken`
+* `refresh_token`
+* `authorization`
+* `cookie`
+* `set-cookie`
+
+Sensitive values are replaced with:
+
+```text
+[REDACTED]
+```
+
+Authorization headers are also sanitized.
+
+For example:
+
+```text
+Bearer eyJhbGciOi...
+```
+
+is logged as:
+
+```text
+Bearer [REDACTED]
+```
+
+Passwords are not logged during authentication.
+
+The previous login debug logging was also removed so that authentication attempts do not create unnecessary credential-related log entries.
+
+---
+
+# X3 — Structured JSON Logging
+
+The request logging system was extended with structured JSON logs.
+
+Every application request log contains:
+
+* `requestId`
+* `method`
+* `path`
+* `status`
+* `duration`
+
+Example:
+
+```json
+{
+  "requestId": "test-request-123",
+  "method": "GET",
+  "path": "/health",
+  "status": 200,
+  "duration": 0.59
+}
+```
+
+The request ID is obtained from the incoming:
+
+```http
+X-Request-ID
+```
+
+header when supplied.
+
+If the client does not provide one, a UUID is generated automatically.
+
+The generated/requested ID is attached to the request:
+
+```ts
+request.requestId = requestId;
+```
+
+and returned to the client:
+
+```http
+X-Request-ID: <request-id>
+```
+
+The request start time is also stored so that structured error logs can include request duration.
+
+Unexpected HTTP errors therefore contain the same request ID and structured request information.
+
+Example:
+
+```json
+{
+  "event": "http.unhandled_exception",
+  "requestId": "filter-request-123",
+  "method": "GET",
+  "path": "/test/error",
+  "status": 500,
+  "duration": 0,
+  "message": "development-only diagnostic"
+}
+```
+
+This makes logs easier to search and correlate across the lifetime of a request.
+
+---
+
+# Assignment 3 Completion
+
+Week 10 Assignment 3 implements production hardening across configuration, logging, health monitoring, shutdown handling, and security.
+
+The final local verification confirms:
+
+```text
+10 test suites passed
+57 tests passed
+0 test failures
+0 lint warnings
+0 lint errors
+Build successful
+X1 complete
+X2 complete
+X3 complete
+```
+
+The assignment is ready for the final Git commit and pull request after the verified changes are staged.

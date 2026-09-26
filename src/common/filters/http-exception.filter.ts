@@ -21,12 +21,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
-    const request = http.getRequest<Request & { requestId?: string }>();
+    const request = http.getRequest<
+      Request & { requestId?: string; requestStartedAt?: bigint }
+    >();
     const response = http.getResponse<Response>();
 
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
     let error = 'Internal Server Error';
+
+    const duration =
+      request.requestStartedAt !== undefined
+        ? Number(process.hrtime.bigint() - request.requestStartedAt) / 1_000_000
+        : 0;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -69,6 +76,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
           method: request.method,
           path: request.url,
           status: statusCode,
+          duration: Math.round(duration * 100) / 100,
           message: originalMessage,
           ...(stack ? { stack } : {}),
         }),
